@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\WorkflowManagement.Extensions\WorkflowManagement.Extensions.csproj" />
+    <ProjectReference Include="..\WorkflowManagement.Persistence\WorkflowManagement.Persistence.csproj" />
+    <ProjectReference Include="..\WorkflowManagement.Services\WorkflowManagement.Services.csproj" />
+    <ProjectReference Include="..\WorkflowManagement.Builder\WorkflowManagement.Builder.csproj" />
+    <ProjectReference Include="..\WorkflowManagement.Core\WorkflowManagement.Core.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
