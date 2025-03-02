@@ -41,7 +41,7 @@ public class WorkflowService : IWorkflowService
         if (workflow == null)
             throw new KeyNotFoundException($"Workflow with ID {workflowId} not found");
 
-        await workflow.MoveToNextStepAsync(userId, roleId, data);
+        await workflow.MoveToNextStepAsync(userId, roleId, data, _serviceProvider);
         await _repository.SaveWorkflowAsync(workflow);
     }
 }

@@ -8,6 +8,8 @@ public class Workflow : IWorkflow
 
     public string Id { get; private set; }
     public string Name { get; set; }
+
+    public bool IsCompleted { get; set; }
     public IEnumerable<IWorkflowStep> Steps => _steps;
 
     public IWorkflowStep CurrentStep => _steps.FirstOrDefault(s => s.Id == _currentStepId);
@@ -32,14 +34,14 @@ public class Workflow : IWorkflow
     public async Task<bool> CanMoveToNextStepAsync(string userId, string roleId)
     {
         var currentStepIndex = _steps.FindIndex(s => s.Id == _currentStepId);
-        if (currentStepIndex >= _steps.Count - 1)
+        if (currentStepIndex >= _steps.Count)
             return false;
 
         var currentStep = _steps[currentStepIndex];
         return currentStep.RequiredRoles.Contains(roleId);
     }
 
-    public async Task MoveToNextStepAsync(string userId, string roleId, IDictionary<string, object> data)
+    public async Task MoveToNextStepAsync(string userId, string roleId, IDictionary<string, object> data, IServiceProvider serviceProvider)
     {
         if (!await CanMoveToNextStepAsync(userId, roleId))
             throw new UnauthorizedAccessException("User does not have permission to move to the next step");
@@ -48,7 +50,8 @@ public class Workflow : IWorkflow
         {
             UserId = userId,
             UserRoles = new[] { roleId },
-            Data = data
+            Data = data,
+            ServiceProvider = serviceProvider
         };
 
         var currentStepIndex = _steps.FindIndex(s => s.Id == _currentStepId);
@@ -56,10 +59,18 @@ public class Workflow : IWorkflow
         // Execute exit actions for current step
         await _steps[currentStepIndex].ExecuteAsync(context);
 
-        // Move to next step
-        _currentStepId = _steps[currentStepIndex + 1].Id;
+        if (_steps.Count == currentStepIndex + 1)
+        {
+            //no more next step
+            IsCompleted = true;
+        }
+        else
+        {
+            // Move to next step
+            _currentStepId = _steps[currentStepIndex + 1].Id;
+        }
 
         // Execute entry actions for new step
-        await _steps[currentStepIndex + 1].ExecuteAsync(context);
+        // await _steps[currentStepIndex + 1].ExecuteAsync(context);
     }
 }
