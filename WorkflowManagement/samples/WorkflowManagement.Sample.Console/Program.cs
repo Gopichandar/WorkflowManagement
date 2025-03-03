@@ -1,196 +1,190 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using WorkflowManagement.Builder;
 using WorkflowManagement.Core;
+using WorkflowManagement.Core.Models;
 using WorkflowManagement.Extensions;
+using WorkflowManagement.Persistence.InMemory;
+using WorkflowManagement.Persistence;
 using WorkflowManagement.Services;
 
-System.Console.WriteLine("Workflow Management Library Demo");
-System.Console.WriteLine("================================\n");
-
 // Setup dependency injection
-var services = new ServiceCollection();
+var serviceProvider = ConfigureServices();
 
-// Use in-memory storage for simplicity
-services.AddWorkflowManagement(options => {
-    options.UseInMemoryStorage = true;
-});
-
-// Register action handlers
-services.AddTransient<LogActionHandler>();
-services.AddTransient<NotificationActionHandler>();
-
-var serviceProvider = services.BuildServiceProvider();
+// Get workflow service
 var workflowService = serviceProvider.GetRequiredService<IWorkflowService>();
+var blueprintRepository = serviceProvider.GetRequiredService<IWorkflowBlueprintRepository>();
 
-// Create a sample workflow
-System.Console.WriteLine("Creating sample workflow...");
-var workflow = await CreateSampleWorkflowAsync(workflowService);
-System.Console.WriteLine($"Created workflow: {workflow.Name} (ID: {workflow.Id})");
+Console.WriteLine("Workflow Management Console");
+Console.WriteLine("==========================");
 
-// Display workflow details
-DisplayWorkflow(workflow);
+// Create and save a workflow blueprint
+var expenseApprovalBlueprint = await CreateExpenseApprovalBlueprintAsync(blueprintRepository);
+Console.WriteLine($"Created blueprint: {expenseApprovalBlueprint.Name} (ID: {expenseApprovalBlueprint.Id})");
 
-// Process the workflow through its steps
-await ProcessWorkflowAsync(workflow, workflowService);
+// Create a workflow instance using the blueprint
+var workflow = await workflowService.CreateWorkflowInstanceAsync(
+    expenseApprovalBlueprint.Id,
+    builder => builder.WithName("John's Expense Claim")
+);
 
-System.Console.WriteLine("\nDemo completed. Press any key to exit.");
-System.Console.ReadKey();
+Console.WriteLine($"Created workflow: {workflow.Name} (ID: {workflow.Id})");
+Console.WriteLine($"Current step: {workflow.CurrentStep.Name}");
 
+// Simulate workflow progression
+await SimulateWorkflowProgressionAsync(workflowService, workflow);
 
-static async Task<IWorkflow> CreateSampleWorkflowAsync(IWorkflowService workflowService)
+Console.WriteLine("\nPress any key to exit...");
+Console.ReadKey();
+
+static IServiceProvider ConfigureServices()
 {
-    return await workflowService.CreateWorkflowAsync(builder => {
-        builder
-            .WithName("Document Approval Process")
-            .AddStep(step => {
-                step.WithName("Draft")
-                    .RequireRole("Author")
-                    .AddAction(action => {
-                        action.WithName("Create Document")
-                            .WithHandler(async context => {
-                                System.Console.WriteLine("Action: Document drafted");
-                                context.Data["DocumentId"] = Guid.NewGuid().ToString();
-                                context.Data["DocumentTitle"] = "Sample Document";
-                                context.Data["Content"] = "This is sample content";
-                                await Task.CompletedTask;
-                            });
-                    });
-            })
-            .AddStep(step => {
-                step.WithName("Review")
-                    .RequireRole("Reviewer")
-                    .AddAction(action => {
-                        action.WithName("Review Document")
-                            .WithHandler(async context => {
-                                System.Console.WriteLine("Action: Document reviewed");
-                                context.Data["ReviewedBy"] = "John Reviewer";
-                                context.Data["ReviewDate"] = DateTime.Now;
-                                context.Data["Comments"] = "Looks good!";
-                                await Task.CompletedTask;
-                            });
-                    });
-            })
-            .AddStep(step => {
-                step.WithName("Approve")
-                    .RequireRole("Manager")
-                    .AddAction(action => {
-                        action.WithName("Approve Document")
-                            .WithHandler(async context => {
-                                System.Console.WriteLine("Action: Document approved");
-                                context.Data["ApprovedBy"] = "Jane Manager";
-                                context.Data["ApprovalDate"] = DateTime.Now;
-                                await Task.CompletedTask;
-                            });
-                    });
-            })
-            .AddStep(step => {
-                step.WithName("Publish")
-                    .RequireRole("Publisher")
-                    .AddAction(action => {
-                        action.WithName("Publish Document")
-                            .WithHandler(async context => {
-                                System.Console.WriteLine("Action: Document published");
-                                context.Data["PublishedBy"] = "Bob Publisher";
-                                context.Data["PublishDate"] = DateTime.Now;
-                                context.Data["PublicUrl"] = $"https://example.com/docs/{context.Data["DocumentId"]}";
-                                await Task.CompletedTask;
-                            });
-                    })
-                    .AddAction(action => {
-                        action.WithName("Notify Author")
-                            .WithHandler(async context => {
-                                var notifier = context.ServiceProvider.GetRequiredService<NotificationActionHandler>();
-                                await notifier.NotifyAsync("author@example.com", "Your document has been published");
-                                System.Console.WriteLine("Action: Author notified");
-                            });
-                    });
-            });
-    });
+    var services = new ServiceCollection();
+
+    // Register repositories
+    services.AddWorkflowManagement(x => x.UseInMemoryStorage = true);
+
+    // Register action handlers
+    services.AddTransient<LogActionHandler>();
+    services.AddTransient<NotifyUserActionHandler>();
+    services.AddTransient<SendEmailActionHandler>();
+
+    return services.BuildServiceProvider();
 }
-        
-static void DisplayWorkflow(IWorkflow workflow)
+
+static async Task<WorkflowBlueprint> CreateExpenseApprovalBlueprintAsync(IWorkflowBlueprintRepository blueprintRepository)
 {
-    System.Console.WriteLine("\nWorkflow Steps:");
-    System.Console.WriteLine("---------------");
-            
-    var steps = workflow.Steps as IEnumerable<IWorkflowStep>;
-    int stepNumber = 1;
-            
-    foreach (var step in steps)
-    {
-        System.Console.WriteLine($"{stepNumber}. {step.Name}");
-        System.Console.WriteLine($"   Required Roles: {string.Join(", ", step.RequiredRoles)}");
-                
-        System.Console.WriteLine("   Actions:");
-        foreach (var action in step.Actions)
+    // Create a blueprint for an expense approval workflow
+    var blueprintBuilder = new WorkflowBlueprintBuilder()
+        .WithName("Expense Approval Workflow")
+        .WithVersion(1);
+
+    // 1. Submission step
+    string submissionStepId = Guid.NewGuid().ToString();
+    string managerReviewStepId = Guid.NewGuid().ToString();
+    string financeReviewStepId = Guid.NewGuid().ToString();
+    string paymentStepId = Guid.NewGuid().ToString();
+
+    blueprintBuilder.AddStep(step => step
+        .WithName("Submission")
+        .AsInitial()
+        .RequireRole("Employee")
+        .WithNextStep(managerReviewStepId)
+        .AddExitAction("LogAction", new Dictionary<string, object>
         {
-            System.Console.WriteLine($"   - {action.Name}");
-        }
-                
-        stepNumber++;
-        System.Console.WriteLine();
-    }
-            
-    System.Console.WriteLine($"Current Step: {workflow.CurrentStep.Name}");
+                    { "message", "Expense submitted" }
+        }));
+
+    // 2. Manager Review step
+    blueprintBuilder.AddStep(step => step
+        .WithName("Manager Review")
+        .RequireRole("Manager")
+        .WithNextStep(financeReviewStepId)
+        .AddEntryAction("NotifyUser", new Dictionary<string, object>
+        {
+                    { "email", "manager@company.com" },
+                    { "subject", "Expense needs review" }
+        }));
+
+    // 3. Finance Review step
+    blueprintBuilder.AddStep(step => step
+        .WithName("Finance Review")
+        .RequireRole("Finance")
+        .WithNextStep(paymentStepId)
+        .AddEntryAction("NotifyUser", new Dictionary<string, object>
+        {
+                    { "email", "finance@company.com" },
+                    { "subject", "Expense approved by manager" }
+        }));
+
+    // 4. Payment Processing step
+    blueprintBuilder.AddStep(step => step
+        .WithName("Payment Processing")
+        .RequireRole("Finance")
+        .AddEntryAction("ProcessPayment", new Dictionary<string, object>())
+        .AddExitAction("SendEmail", new Dictionary<string, object>
+        {
+                    { "subject", "Expense approved and paid" }
+        }));
+
+    var blueprint = blueprintBuilder.Build();
+    await blueprintRepository.SaveBlueprintAsync(blueprint);
+    return blueprint;
 }
-        
-static async Task ProcessWorkflowAsync(IWorkflow workflow, IWorkflowService workflowService)
+
+static async Task SimulateWorkflowProgressionAsync(IWorkflowService workflowService, IWorkflow workflow)
 {
-    System.Console.WriteLine("\nProcessing Workflow:");
-    System.Console.WriteLine("-------------------");
-            
-    // Create sample data
-    var data = new Dictionary<string, object>();
-            
-    // Step 1: Author creates draft
-    System.Console.WriteLine("\nStep 1: Author creates draft");
-    await workflowService.MoveWorkflowToNextStepAsync(workflow.Id, "user1", "Author", data);
-    System.Console.WriteLine($"Current step: {(await workflowService.GetWorkflowAsync(workflow.Id)).CurrentStep.Name}");
-    System.Console.WriteLine("Data added:");
-    foreach (var item in data)
-    {
-        System.Console.WriteLine($"- {item.Key}: {item.Value}");
-    }
-            
-    // Step 2: Reviewer reviews
-    System.Console.WriteLine("\nStep 2: Reviewer reviews document");
-    await workflowService.MoveWorkflowToNextStepAsync(workflow.Id, "user2", "Reviewer", data);
-    System.Console.WriteLine($"Current step: {(await workflowService.GetWorkflowAsync(workflow.Id)).CurrentStep.Name}");
-    System.Console.WriteLine("Data added:");
-    foreach (var item in data)
-    {
-        if (item.Key.StartsWith("Review"))
-        {
-            System.Console.WriteLine($"- {item.Key}: {item.Value}");
-        }
-    }
-            
-    // Step 3: Manager approves
-    System.Console.WriteLine("\nStep 3: Manager approves document");
-    await workflowService.MoveWorkflowToNextStepAsync(workflow.Id, "user3", "Manager", data);
-    System.Console.WriteLine($"Current step: {(await workflowService.GetWorkflowAsync(workflow.Id)).CurrentStep.Name}");
-    System.Console.WriteLine("Data added:");
-    foreach (var item in data)
-    {
-        if (item.Key.StartsWith("Approv"))
-        {
-            System.Console.WriteLine($"- {item.Key}: {item.Value}");
-        }
-    }
-            
-    // Step 4: Publisher publishes
-    System.Console.WriteLine("\nStep 4: Publisher publishes document");
-    await workflowService.MoveWorkflowToNextStepAsync(workflow.Id, "user4", "Publisher", data);
-            
-    // Final data
-    System.Console.WriteLine("\nFinal workflow data:");
-    foreach (var item in data)
-    {
-        System.Console.WriteLine($"- {item.Key}: {item.Value}");
-    }
-            
-    System.Console.WriteLine("\nWorkflow completed!");
+    Console.WriteLine("\nSimulating workflow progression:");
+
+    // 1. Employee submits expense
+    Console.WriteLine("\nStep 1: Employee submits expense");
+    var submissionData = new Dictionary<string, object>
+            {
+                { "amount", 1250.00 },
+                { "description", "Conference travel expenses" },
+                { "EmployeeEmail", "john@company.com" }
+            };
+
+    await workflowService.MoveWorkflowToNextStepAsync(
+        workflow.Id,
+        "user-1",
+        "Employee",
+        submissionData);
+
+    workflow = await workflowService.GetWorkflowAsync(workflow.Id);
+    Console.WriteLine($"Current step: {workflow.CurrentStep.Name}");
+
+    // 2. Manager reviews and approves
+    Console.WriteLine("\nStep 2: Manager reviews and approves");
+    var managerData = new Dictionary<string, object>
+            {
+                { "approved", true },
+                { "comments", "Approved as per policy" }
+            };
+
+    await workflowService.MoveWorkflowToNextStepAsync(
+        workflow.Id,
+        "user-2",
+        "Manager",
+        managerData);
+
+    workflow = await workflowService.GetWorkflowAsync(workflow.Id);
+    Console.WriteLine($"Current step: {workflow.CurrentStep.Name}");
+
+    // 3. Finance reviews and processes
+    Console.WriteLine("\nStep 3: Finance reviews and processes");
+    var financeData = new Dictionary<string, object>
+            {
+                { "costCenter", "DEPT-001" },
+                { "paymentMethod", "BankTransfer" }
+            };
+
+    await workflowService.MoveWorkflowToNextStepAsync(
+        workflow.Id,
+        "user-3",
+        "Finance",
+        financeData);
+
+    workflow = await workflowService.GetWorkflowAsync(workflow.Id);
+    Console.WriteLine($"Current step: {workflow.CurrentStep.Name}");
+
+    // 4. Finance completes payment
+    Console.WriteLine("\nStep 4: Finance completes payment");
+    var paymentData = new Dictionary<string, object>
+            {
+                { "paymentReference", "PAY-2025-0001" },
+                { "paymentDate", DateTime.Now }
+            };
+
+    await workflowService.MoveWorkflowToNextStepAsync(
+        workflow.Id,
+        "user-3",
+        "Finance",
+        paymentData);
+
+    workflow = await workflowService.GetWorkflowAsync(workflow.Id);
+    Console.WriteLine($"Workflow completed: {workflow.IsCompleted}");
 }
-    
+
 // Sample action handlers
 public class LogActionHandler
 {
@@ -201,11 +195,21 @@ public class LogActionHandler
     }
 }
     
-public class NotificationActionHandler
+public class NotifyUserActionHandler
 {
     public Task NotifyAsync(string recipient, string message)
     {
         System.Console.WriteLine($"NOTIFICATION to {recipient}: {message}");
+        return Task.CompletedTask;
+    }
+}
+
+
+public class SendEmailActionHandler
+{
+    public Task SendEmailAsync(string to, string subject, WorkflowContext context)
+    {
+        Console.WriteLine($"EMAIL to {to}: {subject}");
         return Task.CompletedTask;
     }
 }

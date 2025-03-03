@@ -1,18 +1,18 @@
-﻿namespace WorkflowManagement.Core;
+﻿using WorkflowManagement.Core.Models;
 
+namespace WorkflowManagement.Core;
 
 public class Workflow : IWorkflow
 {
-    private List<WorkflowStep> _steps = new();
-    private string _currentStepId;
-
     public string Id { get; private set; }
     public string Name { get; set; }
+    public bool IsCompleted { get; private set; }
+    public string CurrentStepId { get; set; }
+    public WorkflowStepDefinition CurrentStep => Blueprint?.StepDefinitions.FirstOrDefault(s => s.Id == CurrentStepId);
+    public WorkflowBlueprint Blueprint { get; set; }
 
-    public bool IsCompleted { get; set; }
-    public IEnumerable<IWorkflowStep> Steps => _steps;
-
-    public IWorkflowStep CurrentStep => _steps.FirstOrDefault(s => s.Id == _currentStepId);
+    // Store workflow state/data
+    public Dictionary<string, object> WorkflowData { get; set; } = new();
 
     public Workflow(string name)
     {
@@ -20,29 +20,23 @@ public class Workflow : IWorkflow
         Name = name;
     }
 
-    public void AddStep(WorkflowStep step)
-    {
-        _steps.Add(step);
-
-        // Set as current step if this is the first step
-        if (_steps.Count == 1)
-        {
-            _currentStepId = step.Id;
-        }
-    }
-
     public async Task<bool> CanMoveToNextStepAsync(string userId, string roleId)
     {
-        var currentStepIndex = _steps.FindIndex(s => s.Id == _currentStepId);
-        if (currentStepIndex >= _steps.Count)
+        if (IsCompleted || CurrentStep == null)
             return false;
 
-        var currentStep = _steps[currentStepIndex];
-        return currentStep.RequiredRoles.Contains(roleId);
+        var nextStep = Blueprint.GetNextStep(CurrentStepId);
+        if (nextStep == null)
+            return false;
+
+        return nextStep.RequiredRoles.Contains(roleId);
     }
 
     public async Task MoveToNextStepAsync(string userId, string roleId, IDictionary<string, object> data, IServiceProvider serviceProvider)
     {
+        if (IsCompleted)
+            throw new InvalidOperationException("Workflow is already completed");
+
         if (!await CanMoveToNextStepAsync(userId, roleId))
             throw new UnauthorizedAccessException("User does not have permission to move to the next step");
 
@@ -54,23 +48,40 @@ public class Workflow : IWorkflow
             ServiceProvider = serviceProvider
         };
 
-        var currentStepIndex = _steps.FindIndex(s => s.Id == _currentStepId);
-
         // Execute exit actions for current step
-        await _steps[currentStepIndex].ExecuteAsync(context);
+        if (CurrentStep != null)
+        {
+            await ExecuteActionsAsync(CurrentStep.ExitActions, context);
+        }
 
-        if (_steps.Count == currentStepIndex + 1)
+        // Move to next step
+        var nextStep = Blueprint.GetNextStep(CurrentStepId);
+        if (nextStep == null)
         {
-            //no more next step
             IsCompleted = true;
+            return;
         }
-        else
-        {
-            // Move to next step
-            _currentStepId = _steps[currentStepIndex + 1].Id;
-        }
+
+        CurrentStepId = nextStep.Id;
 
         // Execute entry actions for new step
-        // await _steps[currentStepIndex + 1].ExecuteAsync(context);
+        await ExecuteActionsAsync(nextStep.EntryActions, context);
+    }
+
+    private async Task ExecuteActionsAsync(List<WorkflowActionDefinition> actions, WorkflowContext context)
+    {
+        if (actions == null || !actions.Any())
+            return;
+
+        // Here you would implement the actual execution of actions
+        // This could involve looking up action handlers from a registry
+        // and invoking them with the provided context
+
+        foreach (var action in actions)
+        {
+            // Example implementation:
+            // var actionHandler = context.ServiceProvider.GetService<IActionHandlerFactory>().GetHandler(action.ActionType);
+            // await actionHandler.ExecuteAsync(action.Parameters, context);
+        }
     }
 }

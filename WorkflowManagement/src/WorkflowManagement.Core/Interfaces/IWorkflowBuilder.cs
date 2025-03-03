@@ -1,8 +1,10 @@
-﻿namespace WorkflowManagement.Core;
+﻿using WorkflowManagement.Core.Models;
+
+namespace WorkflowManagement.Core;
 
 public interface IWorkflowBuilder
 {
     IWorkflowBuilder WithName(string name);
-    IWorkflowBuilder AddStep(Action<IWorkflowStepBuilder> stepBuilderAction);
+    IWorkflowBuilder UseBlueprint(WorkflowBlueprint blueprint);
     IWorkflow Build();
 }

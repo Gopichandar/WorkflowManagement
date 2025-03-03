@@ -1,7 +1,7 @@
 ﻿using WorkflowManagement.Core;
+using WorkflowManagement.Core.Models;
 
 namespace WorkflowManagement.Builder;
-
 
 public class WorkflowBuilder : IWorkflowBuilder
 {
@@ -18,19 +18,27 @@ public class WorkflowBuilder : IWorkflowBuilder
         return this;
     }
 
-    public IWorkflowBuilder AddStep(Action<IWorkflowStepBuilder> stepBuilderAction)
+    public IWorkflowBuilder UseBlueprint(WorkflowBlueprint blueprint)
     {
-        var stepBuilder = new WorkflowStepBuilder();
-        stepBuilderAction(stepBuilder);
+        _workflow.Blueprint = blueprint;
 
-        var step = stepBuilder.Build();
-        _workflow.AddStep((WorkflowStep)step);
+        // Set the initial step
+        var initialStep = blueprint.GetInitialStep();
+        if (initialStep != null)
+        {
+            _workflow.CurrentStepId = initialStep.Id;
+        }
 
         return this;
     }
 
     public IWorkflow Build()
     {
+        if (_workflow.Blueprint == null)
+        {
+            throw new InvalidOperationException("Workflow must have a blueprint");
+        }
+
         return _workflow;
     }
 }
