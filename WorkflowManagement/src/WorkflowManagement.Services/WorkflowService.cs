@@ -82,4 +82,14 @@ public class WorkflowService : IWorkflowService
         await workflow.MoveToNextStepAsync(userId, roleId, data, _serviceProvider);
         await _repository.SaveWorkflowAsync(workflow);
     }
+
+    public async Task RejectWorkflowStepAsync(string workflowId, string userId, string roleId, string rejectionReason, IDictionary<string, object> data)
+    {
+        var workflow = await _repository.GetWorkflowAsync(workflowId);
+        if (workflow == null)
+            throw new KeyNotFoundException($"Workflow with ID {workflowId} not found");
+
+        await workflow.RejectStepAsync(userId, roleId, rejectionReason, data, _serviceProvider);
+        await _repository.SaveWorkflowAsync(workflow);
+    }
 }

@@ -32,6 +32,17 @@ public class Workflow : IWorkflow
         return CurrentStep.RequiredRoles.Contains(roleId);
     }
 
+    public async Task<bool> CanRejectStepAsync(string userId, string roleId)
+    {
+        if (IsCompleted || CurrentStep == null || CurrentStep.IsInitial)
+            return false;
+
+        // Check if user has rejection permission for current step
+        // You might want to add a specific "CanReject" property to steps
+        return CurrentStep.RequiredRoles.Contains(roleId);
+    }
+
+
     public async Task MoveToNextStepAsync(string userId, string roleId, IDictionary<string, object> data, IServiceProvider serviceProvider)
     {
         if (IsCompleted)
@@ -66,6 +77,72 @@ public class Workflow : IWorkflow
 
         // Execute entry actions for new step
         await ExecuteActionsAsync(nextStep.EntryActions, context);
+    }
+
+    public async Task RejectStepAsync(string userId, string roleId, string rejectionReason, IDictionary<string, object> data, IServiceProvider serviceProvider)
+    {
+        if (IsCompleted)
+            throw new InvalidOperationException("Workflow is already completed");
+
+        if (!await CanRejectStepAsync(userId, roleId))
+            throw new UnauthorizedAccessException("User does not have permission to reject this step");
+
+        if (CurrentStep.IsInitial)
+            throw new InvalidOperationException("Cannot reject the initial step");
+
+        var context = new WorkflowContext
+        {
+            UserId = userId,
+            UserRoles = new[] { roleId },
+            Data = data,
+            ServiceProvider = serviceProvider
+        };
+
+        // Store rejection information in workflow data
+        WorkflowData["LastRejection"] = new
+        {
+            StepId = CurrentStepId,
+            Reason = rejectionReason,
+            RejectedBy = userId,
+            RejectedAt = DateTime.UtcNow
+        };
+
+        // Execute rejection actions for current step if defined
+        if (CurrentStep != null && CurrentStep.RejectionActions != null)
+        {
+            await ExecuteActionsAsync(CurrentStep.RejectionActions, context);
+        }
+
+        var rejectionBehavior = Blueprint.RejectionBehavior;
+        if (rejectionBehavior == RejectionBehavior.ResetToDraft)
+        {           
+            var initialStep = Blueprint.GetInitialStep();
+            if (initialStep == null)
+            {
+                throw new InvalidOperationException("No initial step defined in the workflow");
+            }
+            CurrentStepId = initialStep.Id;
+
+            // Execute entry actions for the initial step
+            await ExecuteActionsAsync(initialStep.EntryActions, context);
+        }
+        else
+        {
+            // Go back to previous step
+            // Get previous step definition
+            var previousStep = Blueprint.StepDefinitions.FirstOrDefault(s => s.NextStepId == CurrentStepId);
+            if (previousStep is not null)
+            {
+                string previousStepId = previousStep.Id;
+                CurrentStepId = previousStepId;
+
+                // Execute reentry actions if defined
+                if (previousStep != null && previousStep.ReentryActions != null)
+                {
+                    await ExecuteActionsAsync(previousStep.ReentryActions, context);
+                }
+            }
+        }
     }
 
     private async Task ExecuteActionsAsync(List<WorkflowActionDefinition> actions, WorkflowContext context)

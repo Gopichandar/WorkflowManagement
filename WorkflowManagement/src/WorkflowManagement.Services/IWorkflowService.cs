@@ -11,4 +11,5 @@ public interface IWorkflowService
     Task<IWorkflow> GetWorkflowAsync(string workflowId);
     Task<IEnumerable<IWorkflow>> GetWorkflowsAsync();
     Task MoveWorkflowToNextStepAsync(string workflowId, string userId, string roleId, IDictionary<string, object> data);
+    Task RejectWorkflowStepAsync(string workflowId, string userId, string roleId, string rejectionReason, IDictionary<string, object> data);
 }

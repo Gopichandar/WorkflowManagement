@@ -12,6 +12,8 @@ public class WorkflowBlueprint
     public int Version { get; set; }
     public List<WorkflowStepDefinition> StepDefinitions { get; set; } = new();
 
+    public RejectionBehavior RejectionBehavior { get; set; } = RejectionBehavior.ReturnToPreviousStep;
+
     public WorkflowStepDefinition GetInitialStep()
     {
         return StepDefinitions.FirstOrDefault(s => s.IsInitial);
@@ -25,4 +27,10 @@ public class WorkflowBlueprint
 
         return StepDefinitions.FirstOrDefault(s => s.Id == currentStep.NextStepId);
     }
+}
+
+public enum RejectionBehavior
+{
+    ReturnToPreviousStep,
+    ResetToDraft
 }

@@ -11,5 +11,7 @@ public interface IWorkflow
     WorkflowStepDefinition CurrentStep { get; }
     WorkflowBlueprint Blueprint { get; }
     Task<bool> CanMoveToNextStepAsync(string userId, string roleId);
+    Task<bool> CanRejectStepAsync(string userId, string roleId);
     Task MoveToNextStepAsync(string userId, string roleId, IDictionary<string, object> data, IServiceProvider serviceProvider);
+    Task RejectStepAsync(string userId, string roleId, string rejectionReason, IDictionary<string, object> data, IServiceProvider serviceProvider);
 }
