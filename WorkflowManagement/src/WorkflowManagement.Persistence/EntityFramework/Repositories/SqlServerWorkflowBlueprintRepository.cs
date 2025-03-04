@@ -9,6 +9,11 @@ using WorkflowManagement.Core.Models;
 namespace WorkflowManagement.Persistence.EntityFramework.Repositories;
 public class SqlServerWorkflowBlueprintRepository : IWorkflowBlueprintRepository
 {
+    public Task<bool> DeleteBlueprintByIdAsync(string id)
+    {
+        throw new NotImplementedException();
+    }
+
     public Task<WorkflowBlueprint> GetBlueprintByIdAsync(string blueprintId)
     {
         throw new NotImplementedException();

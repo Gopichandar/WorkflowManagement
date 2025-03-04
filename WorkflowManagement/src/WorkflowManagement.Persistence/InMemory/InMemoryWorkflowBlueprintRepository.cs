@@ -38,4 +38,9 @@ public class InMemoryWorkflowBlueprintRepository : IWorkflowBlueprintRepository
     {
         return Task.FromResult<IEnumerable<WorkflowBlueprint>>(_blueprints.Values);
     }
+
+    public Task<bool> DeleteBlueprintByIdAsync(string id)
+    {
+        return Task.FromResult(_blueprints.TryRemove(id, out var blueprint));
+    }
 }

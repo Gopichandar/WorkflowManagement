@@ -8,4 +8,5 @@ public interface IWorkflowBlueprintRepository
     Task<WorkflowBlueprint> GetBlueprintByIdAsync(string blueprintId);
     Task<WorkflowBlueprint> GetBlueprintByNameAsync(string name);
     Task<IEnumerable<WorkflowBlueprint>> GetBlueprintsAsync();
+    Task<bool> DeleteBlueprintByIdAsync(string id);
 }
