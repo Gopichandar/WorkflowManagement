@@ -25,11 +25,11 @@ public class Workflow : IWorkflow
         if (IsCompleted || CurrentStep == null)
             return false;
 
-        var nextStep = Blueprint.GetNextStep(CurrentStepId);
-        if (nextStep == null)
-            return false;
+        //var nextStep = Blueprint.GetNextStep(CurrentStepId);
+        //if (nextStep == null)
+        //    return false;
 
-        return nextStep.RequiredRoles.Contains(roleId);
+        return CurrentStep.RequiredRoles.Contains(roleId);
     }
 
     public async Task MoveToNextStepAsync(string userId, string roleId, IDictionary<string, object> data, IServiceProvider serviceProvider)

@@ -50,63 +50,36 @@ static IServiceProvider ConfigureServices()
 
     return services.BuildServiceProvider();
 }
-
 static async Task<WorkflowBlueprint> CreateExpenseApprovalBlueprintAsync(IWorkflowBlueprintRepository blueprintRepository)
 {
-    // Create a blueprint for an expense approval workflow
-    var blueprintBuilder = new WorkflowBlueprintBuilder()
+    // Create a workflow using a fluent chain-style builder
+    var blueprint = new WorkflowBlueprintBuilder()
         .WithName("Expense Approval Workflow")
-        .WithVersion(1);
+        .WithVersion(1)
+        .BeginStep("Submission")
+            .AsInitial()
+            .RequireRole("Employee")
+            .AddExitAction("LogAction", new Dictionary<string, object> { { "message", "Expense submitted" } })
+        .ThenStep("Manager Review")
+            .RequireRole("Manager")
+            .AddEntryAction("NotifyUser", new Dictionary<string, object>
+            {
+                { "email", "manager@company.com" },
+                { "subject", "Expense needs review" }
+            })
+        .ThenStep("Finance Review")
+            .RequireRole("Finance")
+            .AddEntryAction("NotifyUser", new Dictionary<string, object>
+            {
+                { "email", "finance@company.com" },
+                { "subject", "Expense approved by manager" }
+            })
+        .ThenStep("Payment Processing")
+            .RequireRole("Finance")
+            .AddEntryAction("ProcessPayment", new Dictionary<string, object>())
+            .AddExitAction("SendEmail", new Dictionary<string, object> { { "subject", "Expense approved and paid" } })
+        .Build();
 
-    // 1. Submission step
-    string submissionStepId = Guid.NewGuid().ToString();
-    string managerReviewStepId = Guid.NewGuid().ToString();
-    string financeReviewStepId = Guid.NewGuid().ToString();
-    string paymentStepId = Guid.NewGuid().ToString();
-
-    blueprintBuilder.AddStep(step => step
-        .WithName("Submission")
-        .AsInitial()
-        .RequireRole("Employee")
-        .WithNextStep(managerReviewStepId)
-        .AddExitAction("LogAction", new Dictionary<string, object>
-        {
-                    { "message", "Expense submitted" }
-        }));
-
-    // 2. Manager Review step
-    blueprintBuilder.AddStep(step => step
-        .WithName("Manager Review")
-        .RequireRole("Manager")
-        .WithNextStep(financeReviewStepId)
-        .AddEntryAction("NotifyUser", new Dictionary<string, object>
-        {
-                    { "email", "manager@company.com" },
-                    { "subject", "Expense needs review" }
-        }));
-
-    // 3. Finance Review step
-    blueprintBuilder.AddStep(step => step
-        .WithName("Finance Review")
-        .RequireRole("Finance")
-        .WithNextStep(paymentStepId)
-        .AddEntryAction("NotifyUser", new Dictionary<string, object>
-        {
-                    { "email", "finance@company.com" },
-                    { "subject", "Expense approved by manager" }
-        }));
-
-    // 4. Payment Processing step
-    blueprintBuilder.AddStep(step => step
-        .WithName("Payment Processing")
-        .RequireRole("Finance")
-        .AddEntryAction("ProcessPayment", new Dictionary<string, object>())
-        .AddExitAction("SendEmail", new Dictionary<string, object>
-        {
-                    { "subject", "Expense approved and paid" }
-        }));
-
-    var blueprint = blueprintBuilder.Build();
     await blueprintRepository.SaveBlueprintAsync(blueprint);
     return blueprint;
 }

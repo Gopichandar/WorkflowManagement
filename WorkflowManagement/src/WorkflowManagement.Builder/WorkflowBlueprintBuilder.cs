@@ -9,12 +9,15 @@ namespace WorkflowManagement.Builder;
 public class WorkflowBlueprintBuilder : IWorkflowBlueprintBuilder
 {
     private readonly WorkflowBlueprint _blueprint;
+    private readonly Dictionary<string, WorkflowStepDefinition> _steps = new();
+    private WorkflowStepDefinition _currentStep;    
 
     public WorkflowBlueprintBuilder()
     {
         _blueprint = new WorkflowBlueprint
         {
-            Version = 1
+            Version = 1,
+            StepDefinitions = new List<WorkflowStepDefinition>()
         };
     }
 
@@ -30,17 +33,59 @@ public class WorkflowBlueprintBuilder : IWorkflowBlueprintBuilder
         return this;
     }
 
-    public IWorkflowBlueprintBuilder AddStep(Action<IWorkflowStepDefinitionBuilder> stepBuilderAction)
+    public IChainStepBuilder BeginStep(string name)
     {
-        var stepBuilder = new WorkflowStepDefinitionBuilder();
-        stepBuilderAction(stepBuilder);
-        var step = stepBuilder.Build();
-        _blueprint.StepDefinitions.Add(step);
-        return this;
+        _currentStep = new WorkflowStepDefinition
+        {
+            Id = Guid.NewGuid().ToString(),
+            Name = name
+        };
+
+        _steps[name] = _currentStep;
+        _blueprint.StepDefinitions.Add(_currentStep);
+
+        return new ChainStepBuilder(this, _currentStep);
+    }
+
+    internal ChainStepBuilder ThenStep(string name)
+    {
+        if (_currentStep == null)
+        {
+            throw new InvalidOperationException("There is no current step to link from. Did you forget to call BeginStep?");
+        }
+
+        // Create the new step
+        var newStep = new WorkflowStepDefinition
+        {
+            Id = Guid.NewGuid().ToString(),
+            Name = name
+        };
+
+        // Link the current step to the new one
+        _currentStep.NextStepId = newStep.Id;
+
+        // Update the current step to be the new step
+        _currentStep = newStep;
+
+        _steps[name] = _currentStep;
+        _blueprint.StepDefinitions.Add(_currentStep);
+
+        return new ChainStepBuilder(this, _currentStep);
     }
 
     public WorkflowBlueprint Build()
     {
+        // Perform final validation
+        var initialSteps = _blueprint.StepDefinitions.Count(s => s.IsInitial);
+        if (initialSteps == 0)
+        {
+            throw new InvalidOperationException("Workflow must have at least one initial step");
+        }
+        else if (initialSteps > 1)
+        {
+            throw new InvalidOperationException("Workflow cannot have more than one initial step");
+        }
+
         return _blueprint;
     }
 }
