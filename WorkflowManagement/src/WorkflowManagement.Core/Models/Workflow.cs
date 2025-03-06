@@ -42,7 +42,6 @@ public class Workflow : IWorkflow
         return CurrentStep.RequiredRoles.Contains(roleId);
     }
 
-
     public async Task MoveToNextStepAsync(string userId, string roleId, IDictionary<string, object> data, IServiceProvider serviceProvider)
     {
         if (IsCompleted)
